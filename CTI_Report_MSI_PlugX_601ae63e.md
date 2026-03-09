@@ -654,7 +654,7 @@ This sample is assessed as part of the **January–March 2026 UNC6384 "Meeting I
 rule MSI_PlugX_GData_DLLSideload_Dropper {
     meta:
         description = "Detects MSI dropper for PlugX via G DATA DLL sideloading"
-        author      = "CTI Analysis"
+        author      = "Muffin"
         date        = "2026-03-03"
         tlp         = "WHITE"
         mitre       = "T1574.001, T1036.005, T1218.007"
@@ -679,7 +679,7 @@ rule MSI_PlugX_GData_DLLSideload_Dropper {
 rule PE_Korplug_Loader_GData_AVKDll {
     meta:
         description = "Detects Korplug/PlugX loader DLL (Avk.dll stage 1)"
-        author      = "CTI Analysis"
+        author      = "Muffin"
         date        = "2026-03-03"
         tlp         = "WHITE"
         mitre       = "T1574.001, T1027.005"
@@ -701,7 +701,7 @@ rule PE_Korplug_Loader_GData_AVKDll {
 rule PE_PlugX_Core_Decoded_AVKTray {
     meta:
         description = "Detects decoded PlugX core DLL from AVKTray.dat (XOR 0x0b)"
-        author      = "CTI Analysis"
+        author      = "Muffin"
         date        = "2026-03-03"
         tlp         = "WHITE"
         mitre       = "T1027, T1071.001, T1573"
@@ -722,7 +722,7 @@ rule PE_PlugX_Core_Decoded_AVKTray {
 rule Binary_AVKTray_XOR_Encrypted_PlugX {
     meta:
         description = "Detects AVKTray.dat — XOR-encrypted PlugX payload with 6-byte header"
-        author      = "CTI Analysis"
+        author      = "Muffin"
         date        = "2026-03-03"
         tlp         = "WHITE"
         hash_sha256 = "732c747f2653e50acc5bc5b0bb07018777a0440840dd1fc5a023f3c4db2d111a"
@@ -745,7 +745,7 @@ title: PlugX DLL Sideloading via G DATA AVK Components
 id: a7f2e1d3-8b4c-4a5e-9f6d-2c1b3e4a5f6d
 status: stable
 description: Detects PlugX infection via G DATA Avk.exe loading malicious Avk.dll
-author: CTI Analysis
+author: Muffin
 date: 2026/03/03
 references:
     - https://lab52.io/blog/plugx-meeting-invitation-via-msbuild-and-gdata/
