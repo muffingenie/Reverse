@@ -408,5 +408,6 @@ detection:
 - MITRE ATT&CK: https://attack.mitre.org/
 
 ---
+note from Muffin: Assess with medium confidence that it is a plugX dropper
 
 *Report generated from REMnux static analysis using: file, peframe, pecheck, pedump, portex, capa, floss, pestr, manalyze, exiftool, yara-rules, ssdeep, signsrch, base64dump, xorsearch — depth=deep. No dynamic execution performed.*
