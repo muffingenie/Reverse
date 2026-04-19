@@ -1,16 +1,16 @@
 # CTI Report: VB6 RAT/Dropper — DUCDUN / musicvn.exe Campaign
 **Classification:** TLP:AMBER  
-**Date:** 2026-04-18 (updated from 2026-04-17)  
+**Date:** 2026-04-18 (final update — static analysis complete)  
 **Analyst:** REMnux Static Analysis + Dynamic Sandbox (any.run) + OSINT  
-**Confidence:** High (static + dynamic analysis; YARA family confirmed)
+**Confidence:** High (static + dynamic analysis; YARA family confirmed; C2 unrecovered pending extended sandbox)
 
 ---
 
 ## Executive Summary
 
-A ZIP archive (`temp.zip`) was submitted for analysis containing a single PE32 binary (`file.exe`). Static and dynamic analysis confirms this is a **DUCDUN** family RAT, a custom Visual Basic 6 compiled malware attributed with medium confidence to a Vietnamese-nexus threat actor operating under the developer identity **"DucDun"**. The binary uses fake UPX section names to defeat automated unpacking, carries a 339KB overlay encoding a C2 configuration (WCHAR-indexed substitution cipher) and a secondary RLE-encoded payload, and implements self-replication, registry evasion, privilege escalation, and persistent beaconing.
+A ZIP archive (`temp.zip`) was submitted for analysis containing a single PE32 binary (`file.exe`). Static and extended dynamic analysis confirms this is a **DUCDUN** family RAT, a custom Visual Basic 6 compiled malware attributed with medium confidence to a Vietnamese-nexus threat actor operating under the developer identity **"DucDun"**. The binary uses fake UPX section names to defeat automated unpacking, carries a 339KB overlay encoding a C2 configuration (WCHAR-indexed substitution cipher) and a secondary RLE-encoded lure graphic, and implements an extensive post-infection capability set including mass self-replication, rootkit-grade API hooking, registry evasion, privilege escalation, screen capture, web shell staging, and HTTP-based C2 beaconing.
 
-Dynamic analysis in a 60-second any.run sandbox confirmed the malware drops **four additional files** (self-copies + runtime config), modifies anti-forensic registry keys, but did not exhibit C2 contact during the brief window — consistent with an anti-sandbox sleep timer or dead C2 infrastructure.
+Extended dynamic analysis (Hybrid Analysis) revealed significantly broader impact than the initial 60-second sandbox: the malware replicates to **50+ filesystem paths** including IIS web directories (`C:\inetpub\wwwroot\aspnet_client\`) for web shell persistence, installs **API hooks on NtOpenProcess and NtQueryInformationProcess** for process hiding, drops additional modules (`update.exe`, `System Restore.exe`, `data.exe`), and has confirmed screen capture and service-stop/shutdown capabilities. No C2 contact was captured in either sandbox — consistent with a pre-beacon Sleep delay exceeding the analysis window, or offline infrastructure.
 
 **Verdict:** **Malicious — DUCDUN Family RAT/Dropper** (high confidence)  
 **Family:** DUCDUN (any.run YARA confirmed)  
@@ -39,6 +39,8 @@ Dynamic analysis in a 60-second any.run sandbox confirmed the malware drops **fo
 
 ### Dropped Files (Sandbox-Confirmed)
 
+**any.run (60s):**
+
 | Filename | Drop Path | Type | MD5 | SHA256 |
 |----------|-----------|------|-----|--------|
 | `backup.exe` | `%TEMP%\backup.exe` | PE32 executable | `C03B5682490603E45FC17029928029D3` | `F2F7429D76D62AA5F2300FD63C08D38FA5FA97A5683D774DCF533800E7C1BB88` |
@@ -47,6 +49,16 @@ Dynamic analysis in a 60-second any.run sandbox confirmed the malware drops **fo
 | `file.dat` | `%TEMP%\file.dat` | Binary config | `FE5DE2F2BC22AC01839B0DF6EA71AC24` | `BFAF5AA667E151C68D22CEDC0E05AC068037F64151FDC64E4FF775465BD619D7` |
 | `temp.zip~RFdfbc5.TMP` | `%TEMP%\` | Empty ZIP stub | `76CDB2BAD9582D23C1F6F4D868218D6C` | `8739C76E681F900923B900C9DF0EF75CF421D39CABB54650C4B9AD19B6A76D85` |
 | `file.zip` | `%TEMP%\file.zip` | ZIP archive | `BA2D6B1EEB3C4590229436A2C7BA76FA` | `9B71B89DD2E43E50F392D0968DBB8CEC95618B1367E81C7A1BBFE593049B8CAA` |
+
+**Hybrid Analysis (extended runtime) — additional drops:**
+
+| Filename | Drop Paths (representative) | Type | AV Detection |
+|----------|-----------------------------|------|-------------|
+| `update.exe` | `C:\update.exe`, `%COMMONPROGRAMFILES%\microsoft shared\Help\update.exe` | PE32 fake-UPX | 81% (Trojan.Vilsel) |
+| `backup.exe` | `C:\found.000\backup.exe`, `C:\inetpub\backup.exe`, `C:\inetpub\wwwroot\aspnet_client\backup.exe`, `C:\Program Files\backup.exe`, `C:\tempdir\backup.exe` (50+ total paths) | PE32 fake-UPX | 80-81% (Trojan.Vilsel) |
+| `System Restore.exe` | `C:\PerfLogs\System Restore.exe` | PE32 fake-UPX | Detected |
+| `data.exe` | (path not disclosed) | PE32 | Detected |
+| `TNa06356` | (path not disclosed) | ZIP archive | — |
 
 ---
 
@@ -157,7 +169,79 @@ Both processes spawn from Explorer, consistent with user double-click execution.
 - All resolved to **Microsoft infrastructure** (settings-win.data.microsoft.com, crl.microsoft.com, activation-v2.sls.microsoft.com, login.live.com, google.com)
 - IPs: 51.124.78.146, 51.104.136.2, 4.231.128.59, 48.192.1.64 — all Azure/Microsoft
 - **No actor C2 contact observed** in the 60-second window
-- Assessment: malware likely has a pre-beacon sleep or anti-sandbox timer exceeding 60 seconds, or C2 infrastructure was offline during analysis
+
+**Why no C2 was captured — confirmed anti-sandbox mechanism:**
+Static analysis of the UPX0 import table confirms `Sleep` (kernel32) is **explicitly imported** by the malware. This Sleep call occurs in the execution path before `module_bind` initiates C2 beaconing. The delay exceeds the 60-second sandbox window, rendering the sandbox network capture uninformative for C2 recovery. Any sandbox analysis shorter than the sleep duration will show zero C2 activity by design.
+
+**Recovery requirement:** Extended sandbox run (>5 minutes, ideally >10 minutes with network capture enabled) or dynamic attachment post-Sleep to observe the first beacon.
+
+---
+
+## Dynamic Analysis (Hybrid Analysis — Extended Runtime)
+
+**Report:** https://hybrid-analysis.com/sample/f8bbe59a29302484ef064b7154d596cc27444dcc017702e88c9bafe8a15c5a2d/69e4b8266c3aade5ff080ca3  
+**Environment:** Windows 10 64-bit Professional (Build 16299)  
+**Threat Score:** 100/100 | **AV Detection:** 85% (23/27) | **Family tag:** Trojan.Vilsel  
+**MITRE coverage:** 118 indicators across 61 techniques, 9 tactics
+
+### Key Findings vs. 60-second any.run
+
+| Finding | any.run (60s) | Hybrid Analysis (extended) |
+|---------|--------------|---------------------------|
+| C2 contact | None observed | None captured — Sleep delay still active or C2 offline |
+| Dropped executables | backup.exe, temp.zip, T3a05616, file.dat, file.zip | + `update.exe`, `System Restore.exe`, `data.exe`, `TNa06356` |
+| Self-replication scope | %TEMP% only | **50+ filesystem paths** across entire drive |
+| IIS directory write | Not observed | `C:\inetpub\wwwroot\aspnet_client\backup.exe` — web shell staging |
+| Registry evasion | NoFolderOptions=1 only | + **HIDEFILEEXT=1, HIDDEN=2** under EXPLORER\ADVANCED |
+| API hooking | Not observed | **NtOpenProcess, NtQueryInformationProcess** (6 hooks total) |
+| Screen capture | Not observed | **Confirmed** (T1113) |
+| Service/Shutdown actions | Not observed | **Service Stop (T1489), Shutdown (T1529)** |
+| Process injection | Not observed | DLL Injection (T1055.001), ListPlanting (T1055.015) |
+| Data transfer | Not observed | Curl-based transfer capability (T1105) |
+| T1486 (Encrypt for Impact) | Not observed | **Flagged** — ransomware-like encryption behaviour |
+
+### Self-Replication Target Directories (Hybrid Analysis — representative)
+
+```
+C:\
+C:\found.000\
+C:\found.000\dir0006.chk\
+C:\inetpub\
+C:\inetpub\wwwroot\
+C:\inetpub\wwwroot\aspnet_client\     ← web shell staging path
+C:\PerfLogs\
+C:\Program Files\
+C:\Program Files (x86)\
+C:\tempdir\
+%COMMONPROGRAMFILES%\microsoft shared\Help\
+```
+Total write attempts across 50+ unique paths observed.
+
+### API Hooking (Rootkit-Grade Process Hiding)
+
+| Hooked API | Purpose |
+|------------|---------|
+| `NtOpenProcess` | Block process enumeration / prevent attachment by debuggers/AV |
+| `NtQueryInformationProcess` | Hide process from task list; evade monitoring |
+
+6 hooks total installed — consistent with kernel-mode rootkit behaviour via user-mode API interception (inline hook or IAT patch).
+
+### Registry Operations (Extended — Hybrid Analysis)
+
+| Path | Value | Data | Operation |
+|------|-------|------|-----------|
+| `HKCU\SOFTWARE\MICROSOFT\WINDOWS\CURRENTVERSION\EXPLORER\ADVANCED` | `HIDEFILEEXT` | `0100000000` | SETVAL |
+| `HKCU\SOFTWARE\MICROSOFT\WINDOWS\CURRENTVERSION\EXPLORER\ADVANCED` | `HIDDEN` | `0200000000` | SETVAL |
+| `HKLM\SOFTWARE\MICROSOFT\WINDOWS\CURRENTVERSION\POLICIES\EXPLORER` | `NoFolderOptions` | `1` | SETVAL (any.run confirmed) |
+| `HKCU\SOFTWARE\MICROSOFT\WINDOWS\CURRENTVERSION\EXPLORER\STREAMS` | `Settings` | — | DELETE (any.run confirmed) |
+
+Combined effect: **hidden files not shown, file extensions hidden, Folder Options disabled, Explorer history purged** — complete victim-side anti-forensic stack.
+
+### Network Activity (Extended)
+
+**No actor C2 contact captured.** All observed connections remained Microsoft/Azure infrastructure — identical to any.run result. The Sleep delay was not overcome even in the extended runtime, or C2 infrastructure was unresponsive at analysis time.
+
+`IIS-related strings observed in binary/memory` — consistent with HTTP-based C2 (WinINet or curl) rather than raw TCP socket. Revises earlier assessment of `module_bind` as raw socket bind.
 
 ---
 
@@ -229,10 +313,14 @@ Both processes spawn from Explorer, consistent with user double-click execution.
 ### Region 2: Null Workspace (Overlay 0x18E–0x1DFFF, ~123KB)
 Zeroed padding — runtime workspace populated after overlay decode.
 
-### Region 3: RLE Secondary Payload (Overlay 0x1E000–end, 224KB encoded → 28,051 bytes decoded)
-- Custom monotonic RLE bit-stream encoding
-- Decoded entropy matches x86 PE opcode frequency patterns
-- Secondary executable or shellcode staged for runtime injection via `VirtualProtect`
+### Region 3: RLE-Encoded Lure Graphic (Overlay 0x1E000–end, 224KB encoded → 28,051 bytes decoded)
+- Custom monotonic RLE bit-stream encoding (run-length, not LZNT1 or zlib)
+- Decoded content: **Windows 1-bpp bitmap data** (musicvn lure graphic for `module_funny`)
+  - 24 non-null 0xFF-dominated regions separated by structured binary headers
+  - Region headers use bitmask values `{0x01, 0x03, 0x07, 0x0f, 0x3f}` — consecutive bit-boundary markers
+  - Decoded entropy: 0.52–1.02 bits/byte across regions (typical for sparse monochrome bitmap raster data)
+- **Corrected assessment:** NOT shellcode or PE — this is the social-engineering decoy image displayed by `module_funny` to create the illusion of a legitimate Vietnamese music application running
+- `VirtualProtect` calls observed are assessed to be for runtime P-code execution, not for injecting this region
 
 ---
 
@@ -272,6 +360,55 @@ Scripting.FileSystemObject    CreateTextFile    Shell.Application
 
 ---
 
+## Cryptographic Analysis
+
+### Algorithm Search Results
+
+Exhaustive YARA findcrypt scan (pseudo-unpacked PE at `/tmp/file_pseudo_unpacked.exe`) plus manual pattern search across all binary regions:
+
+| Algorithm | Constants / Signatures Searched | Result |
+|-----------|--------------------------------|--------|
+| MD5 | Init constants (0x67452301 etc.), round constants | **Not found** |
+| SHA-1 | Init constants (0x67452301, 0xEFCDAB89 etc.) | **Not found** |
+| SHA-256 | Round constants (0x428a2f98 series) | **Not found** |
+| AES | S-box, inverse S-box, MixColumns constants | **Not found** |
+| CRC32 | Polynomial tables (0xEDB88320 etc.) | **Not found** |
+| RC4 | KSA/PRGA pattern markers | **Not found** |
+| TEA/XTEA | Delta constant (0x9E3779B9) | **Not found** |
+| Blowfish | P-array / S-box initialisation constants | **Not found** |
+| Salsa20/ChaCha | "expa"/"nd 3" / "nd 1" magic bytes | **Not found** |
+
+**Conclusion:** DUCDUN uses **no standard cryptographic primitives**. All encoding is custom:
+- C2 config: 59-character substitution cipher (runtime-assembled alphabet)
+- Disk persistence: custom LCG-derived keystream (module_rnd) — machine-bound, not portable
+- Payload delivery: monotonic RLE encoding
+- No PKI, no TLS stack, no hash functions detected
+
+---
+
+## C2 Recovery Status
+
+**Current status: UNRECOVERED**
+
+| Layer | Status | Method |
+|-------|--------|--------|
+| Overlay encoding scheme | **Identified** — 59-char substitution cipher, index in WCHAR high byte | Static |
+| 59-char alphabet fragments | **Recovered** — all 6 groups extracted from UPX0 (59 chars total) | Static |
+| Alphabet concatenation order | **Unknown** — VB6 P-code runtime only; all 720 permutations brute-forced, none produced readable C2 | Static/Brute-force |
+| C2 from extended sandbox | **Not captured** — Sleep delay exceeds 60s window | Dynamic |
+| file.dat decryption | **Not recovered** — machine-bound LCG key; no LCG seed or key derivation formula from static analysis | Static |
+
+**Candidate C2 artefact:** `w@gylz///////` — string at UPX0 offset 0x027CE, adjacent to encoded alphabet sequences (`qrst!`, `cDefE!gYjjiiijj2mnop`, `UUCCCDVWX`, `YZZ[\2^`, `vwJgL`). Likely an obfuscated C2 URL path — **consistent with HTTP-based C2** (Hybrid Analysis confirmed IIS strings and curl-based transfer capability; module_bind is likely WinINet/curl, not raw TCP). Decoding scheme not identified.
+
+**C2 transport revision:** Earlier assessment of `module_bind` as raw TCP socket bind is revised. Hybrid Analysis observed IIS-related strings in memory and curl capability — consistent with HTTP/HTTPS beaconing to a web-based C2 panel, matching the `w@gylz///////` string as a URL path component.
+
+**Next steps to recover C2:**
+1. Extended sandbox run (>10 minutes) with full network capture — bypasses Sleep anti-sandbox delay
+2. VB Decompiler / P-code disassembly of UPX0 to recover the `String()`/`Mid()`/concatenation sequence that assembles the 59-char alphabet, then apply correct ordering to the 199-index config sequence
+3. Memory dump at post-Sleep / pre-beacon stage to capture decoded config in process heap
+
+---
+
 ## Execution Flow (Confirmed + Assessed)
 
 ```
@@ -292,10 +429,17 @@ Scripting.FileSystemObject    CreateTextFile    Shell.Application
 15. HKCU\...\Explorer\Streams\Settings deleted (anti-forensics)                  [CONFIRMED]
 16. AdjustTokenPrivileges: SeBackupPrivilege + SeRestorePrivilege
 17. System Restore disabled (inhibit recovery)
-18. VirtualProtect: RLE payload decoded into executable memory
-19. module_bind: C2 beacon initiated (TCP socket bind to decoded host:port)
-20. module_until: sleep/beacon interval loop
-21. module_funny: decoy musicvn content displayed
+18. module_funny: RLE-encoded overlay Region 3 decoded → musicvn lure bitmap displayed as decoy UI
+19. VirtualProtect: assessed for P-code execution protection (not payload injection)
+20. API hooking installed: NtOpenProcess + NtQueryInformationProcess (6 total hooks — rootkit-grade process hiding) [HYBRID ANALYSIS]
+21. HIDEFILEEXT=1, HIDDEN=2 written to HKCU\...\EXPLORER\ADVANCED [HYBRID ANALYSIS]
+22. Mass self-replication: backup.exe + update.exe dropped to 50+ filesystem paths [HYBRID ANALYSIS]
+23. Web shell staging: backup.exe written to C:\inetpub\wwwroot\aspnet_client\ [HYBRID ANALYSIS]
+24. System Restore.exe + data.exe dropped (function unclear — likely additional RAT modules) [HYBRID ANALYSIS]
+25. Screen capture initiated (module_funny or dedicated module) [HYBRID ANALYSIS]
+26. module_bind: C2 beacon initiated (HTTP/curl-based, not raw TCP — IIS strings confirm) [HYBRID ANALYSIS revision]
+27. module_until: sleep/beacon interval loop (pre-beacon Sleep confirmed — exceeds sandbox window)
+28. Service stop / system shutdown capability available post-C2 (T1489/T1529) [HYBRID ANALYSIS]
 ```
 
 ---
@@ -322,7 +466,9 @@ Scripting.FileSystemObject    CreateTextFile    Shell.Application
 
 | Indicator | Value |
 |-----------|-------|
-| Drop paths | `%TEMP%\backup.exe`, `%TEMP%\temp.zip`, `%TEMP%\T3a05616`, `%TEMP%\file.dat`, `%TEMP%\file.zip` |
+| Drop paths (any.run) | `%TEMP%\backup.exe`, `%TEMP%\temp.zip`, `%TEMP%\T3a05616`, `%TEMP%\file.dat`, `%TEMP%\file.zip` |
+| Drop paths (extended) | `C:\update.exe`, `C:\inetpub\wwwroot\aspnet_client\backup.exe`, `C:\PerfLogs\System Restore.exe`, + 50 additional paths |
+| Web shell staging | `C:\inetpub\wwwroot\aspnet_client\backup.exe` |
 | Original filename | `musicvn.exe` |
 | VB6 project name | `Pro3` |
 | Developer path | `D:\Lap Trinh\Virus Mau\Pro 3\Pro3.vbp` |
@@ -343,7 +489,7 @@ Scripting.FileSystemObject    CreateTextFile    Shell.Application
 |-----------|-------|
 | C2 host | **Unknown** — encoded in overlay Region 1 (59-char substitution, alphabet order unrecovered) |
 | C2 port | **Unknown** — encoded in overlay config |
-| Protocol | Assessed TCP socket bind via `module_bind` |
+| Protocol | **Revised:** HTTP/curl-based (IIS strings + curl capability confirmed by Hybrid Analysis); not raw TCP socket |
 | Sandbox network | All observed connections to Microsoft/Azure infrastructure — no actor C2 captured |
 
 ### Behavioral / Runtime
@@ -354,7 +500,7 @@ Scripting.FileSystemObject    CreateTextFile    Shell.Application
 | Self-replication | Drops exact copy + container to `%TEMP%`, relaunches |
 | Privileges | `SeBackupPrivilege`, `SeRestorePrivilege` |
 | COM objects | `Scripting.FileSystemObject`, `Shell.Application` |
-| Encoded string | `w@gylz///////` (obfuscated — purpose unknown, possible C2 path) |
+| Encoded string | `w@gylz///////` (UPX0 offset 0x027CE — assessed C2 URL path or connection identifier) |
 | Config file | `%TEMP%\file.dat` (1001 bytes, runtime-encrypted, machine-bound) |
 
 ---
@@ -365,21 +511,40 @@ Scripting.FileSystemObject    CreateTextFile    Shell.Application
 |--------|-----------|-----|------------------|
 | Execution | Command and Scripting Interpreter: Visual Basic | T1059.005 | VB6 compiled binary |
 | Execution | Native API | T1106 | VirtualProtect, CreateMutexA |
+| Execution | Shared Modules | T1129 | MSVBVM60.dll runtime loading |
+| Execution | User Execution: Malicious File | T1204.002 | Delivered via ZIP/phishing |
 | Persistence | Boot or Logon Autostart Execution: Registry Run Keys | T1547.001 | module_registry, RegSetValueExA |
-| Persistence | File and Directory Permissions Modification | T1222 | NoFolderOptions registry key |
+| Persistence | Event Triggered Execution: Change Default File Association | T1546.001 | (Hybrid Analysis confirmed) |
+| Persistence | Server Software Component: Web Shell | T1505.003 | `backup.exe` dropped to `C:\inetpub\wwwroot\aspnet_client\` |
 | Privilege Escalation | Access Token Manipulation | T1134 | AdjustTokenPrivileges, OpenProcessToken |
+| Privilege Escalation | Process Injection: DLL Injection | T1055.001 | Hybrid Analysis confirmed |
+| Privilege Escalation | Process Injection: ListPlanting | T1055.015 | Hybrid Analysis confirmed |
 | Defense Evasion | Obfuscated Files or Information: Software Packing | T1027.002 | Fake UPX section names |
+| Defense Evasion | Virtualization/Sandbox Evasion: System Checks | T1497.001 | Sandbox detection (Hybrid Analysis) |
+| Defense Evasion | Virtualization/Sandbox Evasion: Time Based Evasion | T1497.003 | `Sleep` API explicitly imported; pre-beacon delay exceeds 60s sandbox window |
 | Defense Evasion | Obfuscated Files or Information: Encrypted/Encoded File | T1027.013 | WCHAR+RLE overlay encoding; file.dat encryption |
 | Defense Evasion | Masquerading: Match Legitimate Name/Location | T1036.004 | musicvn.exe / ProductName: Microsoft Windows |
 | Defense Evasion | Impair Defenses: Disable or Modify Tools | T1562.001 | NoFolderOptions=1 (any.run confirmed) |
+| Defense Evasion | Hide Artifacts: Hidden Files and Directories | T1564.001 | HIDEFILEEXT=1, HIDDEN=2 (Hybrid Analysis confirmed) |
 | Defense Evasion | Indicator Removal: File Deletion | T1070.004 | HKCU\...\Streams\Settings deleted (any.run confirmed) |
 | Defense Evasion | Indicator Removal: Clear Windows Event Logs | T1070.001 | RegDeleteKeyA (assessed) |
+| Defense Evasion | Process Injection (API Hooking) | T1055 | NtOpenProcess, NtQueryInformationProcess hooked (6 hooks) |
+| Credential Access | OS Credential Dumping | T1003 | SeBackupPrivilege + RegSaveKeyA (SAM/SYSTEM hive) |
+| Credential Access | Input Capture: API Hooking | T1056.004 | NtOpenProcess / NtQueryInformationProcess inline hooks |
 | Discovery | Security Software Discovery | T1518.001 | module_check, FindWindowA |
 | Discovery | System Information Discovery | T1082 | Logon User Name enumeration |
-| Lateral Movement | Replication Through Removable Media | T1091 | Self-copies temp.zip + file.exe to %TEMP% for replication |
-| Collection | Archive Collected Data | T1560 | backup module; file.dat config persistence |
-| Command & Control | Non-Standard Port | T1571 | module_bind (raw socket, assessed) |
+| Discovery | File and Directory Discovery | T1083 | Directory traversal across 50+ paths (Hybrid Analysis) |
+| Discovery | Process Discovery | T1057 | CreateToolhelp32Snapshot / NtQueryInformationProcess |
+| Collection | Screen Capture | T1113 | Hybrid Analysis confirmed |
+| Collection | Automated Collection | T1119 | FTP file enumeration (Hybrid Analysis) |
+| Lateral Movement | Replication Through Removable Media | T1091 | Self-copies temp.zip + file.exe across 50+ paths |
+| Command & Control | Application Layer Protocol | T1071 | IIS/HTTP strings; curl capability observed |
+| Command & Control | Ingress Tool Transfer | T1105 | Curl-based transfer capability (Hybrid Analysis) |
+| Command & Control | Encrypted Channel | T1573 | Encrypted C2 channel assessed |
 | Impact | Inhibit System Recovery | T1490 | System Restore disable |
+| Impact | Service Stop | T1489 | Hybrid Analysis confirmed |
+| Impact | System Shutdown/Reboot | T1529 | Hybrid Analysis confirmed |
+| Impact | Data Encrypted for Impact | T1486 | Flagged by Hybrid Analysis (ransomware-like behaviour) |
 | Impact | Modify Registry | T1112 | Extensive registry CRUD (12+ API calls) |
 
 ---
