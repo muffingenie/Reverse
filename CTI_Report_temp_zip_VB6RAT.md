@@ -1,8 +1,8 @@
 # CTI Report: VB6 RAT/Dropper — DUCDUN / musicvn.exe Campaign
 **Classification:** TLP:AMBER  
-**Date:** 2026-04-18 (final update — static analysis complete)  
-**Analyst:** REMnux Static Analysis + Dynamic Sandbox (any.run) + OSINT  
-**Confidence:** High (static + dynamic analysis; YARA family confirmed; C2 unrecovered pending extended sandbox)
+**Date:** 2026-04-19 (updated — Hybrid Analysis extended runtime added)  
+**Analyst:** REMnux Static Analysis + Dynamic Sandbox (any.run + Hybrid Analysis) + OSINT  
+**Confidence:** High (static + dual sandbox dynamic analysis; YARA family confirmed; C2 unrecovered — Sleep delay defeats both sandbox windows)
 
 ---
 
@@ -670,11 +670,11 @@ tags:
 
 ## Analysis Gaps / Recommended Next Steps
 
-1. **Extended sandbox** (5+ minutes) — The 60-second any.run window was insufficient for C2 contact. Re-run with longer timeout or manual sandbox to capture:
-   - C2 hostname/IP decoded from overlay config
-   - Mutex name
-   - Drop paths for RLE-decoded secondary payload
-   - Network beacon structure and protocol
+1. **Manual detonation with network capture** — Both any.run (60s) and Hybrid Analysis (extended) failed to capture C2 contact. Sleep delay exceeds both windows, or C2 infrastructure is offline. Next steps:
+   - Detonate in controlled lab with Wireshark/PCAP on a live network segment
+   - Attach debugger post-Sleep (after `Sleep` returns) to observe decoded C2 config in heap before beacon fires
+   - Check if `w@gylz///////` resolves as a URL path against candidate hostnames recovered from the substitution cipher
+   - Enumerate `file.dat` on a real host (requires matching machine key from `module_rnd` LCG)
 
 2. **VB Decompiler analysis** — Extract P-code from UPX0 section (already uncompressed) using VB Decompiler Pro or p-code tools to recover the alphabet assembly order for overlay Region 1
 
@@ -690,7 +690,8 @@ tags:
 
 ## References
 
-- any.run sandbox report: https://any.run/report/f8bbe59a29302484ef064b7154d596cc27444dcc017702e88c9bafe8a15c5a2d/a4e673f7-996f-40fe-a940-adfe359dab5b
+- any.run sandbox report (60s): https://any.run/report/f8bbe59a29302484ef064b7154d596cc27444dcc017702e88c9bafe8a15c5a2d/a4e673f7-996f-40fe-a940-adfe359dab5b
+- Hybrid Analysis report (extended runtime): https://hybrid-analysis.com/sample/f8bbe59a29302484ef064b7154d596cc27444dcc017702e88c9bafe8a15c5a2d/69e4b8266c3aade5ff080ca3
 - Broadcom Symantec: [VB6 Threats Still Active In 2024](https://www.broadcom.com/support/security-center/protection-bulletin/protection-highlight-vb6-threats-still-active)
 - Cyble: [Vietnamese Threat Actor's Strategy on Digital Marketers](https://cyble.com/blog/vietnamese-threat-actors-multi-layered-strategy-on-digital-marketing-professionals/)
 - Google Threat Intelligence: [Vietnamese Actors Using Fake Job Posting Campaigns](https://cloud.google.com/blog/topics/threat-intelligence/vietnamese-actors-fake-job-posting-campaigns)
