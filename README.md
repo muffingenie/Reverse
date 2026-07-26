@@ -28,3 +28,10 @@
 - Requires close guidance throughout the process  
   *(for example: identifying decryption constants, decrypting payloads, extracting configs, etc.)*
 - Pro subscriptions remain **too limited in tokens** for sustained analysis
+
+Update 26/07/2026:
+
+- Good results with sonnet 5,
+- Very good cryptographic logic and reasoning,
+- Token consumption seems efficient at medium effort, including with Pro plan,
+- Triggered guardrail before being accepted in Anthropic cybersecurity program.
