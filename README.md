@@ -29,7 +29,7 @@
   *(for example: identifying decryption constants, decrypting payloads, extracting configs, etc.)*
 - Pro subscriptions remain **too limited in tokens** for sustained analysis
 
-Update 26/07/2026:
+### Update 26/07/2026:
 
 - Good results with sonnet 5,
 - Very good cryptographic logic and reasoning,
